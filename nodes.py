@@ -99,6 +99,7 @@ class CosyVoiceNode:
     def INPUT_TYPES(s):
         return {
             "required": {
+                "tts_text": ("TEXT",),
                 "speed": ("FLOAT", {
                     "default": 1.0
                 }),
@@ -130,23 +131,23 @@ class CosyVoiceNode:
 
     CATEGORY = "AIFSH_CosyVoice"
 
-    def generate(self, speed, inference_mode, sft_dropdown, seed, tts_text=None,
-                 prompt_text=None, prompt_wav=None, instruct_text=None, source_wav=None):  # 添加 source_wav 参数
+    def generate(self, tts_text, speed, inference_mode, sft_dropdown, seed,
+                 prompt_text=None, prompt_wav=None, instruct_text=None, source_wav=None):
         t0 = ttime()
         if inference_mode == '自然语言控制':
-            model_dir = pretrained_models
+            model_dir = os.path.join(pretrained_models, "CosyVoice-300M-Instruct")
             snapshot_download(model_id="iic/CosyVoice-300M-Instruct", local_dir=model_dir)
             assert instruct_text is not None, "in 自然语言控制 mode, instruct_text can't be none"
         if inference_mode in ["跨语种复刻", '3s极速复刻', '变声']:
-            model_dir = pretrained_models
+            model_dir = os.path.join(pretrained_models, "CosyVoice-300M")
             snapshot_download(model_id="iic/CosyVoice-300M", local_dir=model_dir)
-            assert prompt_wav is not None, "in 跨语种复刻, 3s极速复刻 or 变声 mode, prompt_wav can't be none"
+            assert prompt_wav is not None, "in 跨语种复刻 or 3s极速复刻 mode, prompt_wav can't be none"
             if inference_mode == "3s极速复刻":
                 assert len(prompt_text) > 0, "prompt文本为空，您是否忘记输入prompt文本？"
             if inference_mode == "变声":
                 assert source_wav is not None, "in 变声 mode, source_wav can't be none"
         if inference_mode == "预训练音色":
-            model_dir = pretrained_models
+            model_dir = os.path.join(pretrained_models, "CosyVoice-300M-SFT")
             snapshot_download(model_id="iic/CosyVoice-300M-SFT", local_dir=model_dir)
 
         if self.model_dir != model_dir:
@@ -159,15 +160,14 @@ class CosyVoiceNode:
             speech = waveform.mean(dim=0, keepdim=True)
             if source_sr != prompt_sr:
                 speech = torchaudio.transforms.Resample(orig_freq=source_sr, new_freq=prompt_sr)(speech)
-
-            # 处理源音频（用于变声）
+                # 处理源音频（用于变声）
         if source_wav:
-            source_waveform = source_wav['waveform'].squeeze(0)
-            source_sr = source_wav['sample_rate']
-            source_speech = source_waveform.mean(dim=0, keepdim=True)
-            if source_sr != prompt_sr:
-                source_speech = torchaudio.transforms.Resample(orig_freq=source_sr, new_freq=prompt_sr)(source_speech)
-
+                source_waveform = source_wav['waveform'].squeeze(0)
+                source_sr = source_wav['sample_rate']
+                source_speech = source_waveform.mean(dim=0, keepdim=True)
+                if source_sr != prompt_sr:
+                    source_speech = torchaudio.transforms.Resample(orig_freq=source_sr, new_freq=prompt_sr)(
+                        source_speech)
         if inference_mode == '预训练音色':
             print('get sft inference request')
             print(self.model_dir)
@@ -257,7 +257,7 @@ class CosyVoiceDubbingNode:
     CATEGORY = "AIFSH_CosyVoice"
 
     def generate(self, tts_srt, prompt_wav, language, if_single, seed, prompt_srt=None):
-        model_dir = pretrained_models
+        model_dir = os.path.join(pretrained_models, "CosyVoice-300M")
         snapshot_download(model_id="iic/CosyVoice-300M", local_dir=model_dir)
         set_all_random_seed(seed)
         if self.cosyvoice is None:
@@ -309,7 +309,7 @@ class CosyVoiceDubbingNode:
                     else:
                         if text_subtitles[j].content[0] == speaker_id:
                             prompt_wav_seg += (
-                                    audiosegment.silent(500, frame_rate=prompt_sr) + audio_seg[j_start:j_end])
+                                        audiosegment.silent(500, frame_rate=prompt_sr) + audio_seg[j_start:j_end])
                             if prompt_srt:
                                 prompt_text_list.append(prompt_subtitles[j].content)
                 for j in range(0, i):
@@ -322,7 +322,7 @@ class CosyVoiceDubbingNode:
                     else:
                         if text_subtitles[j].content[0] == speaker_id:
                             prompt_wav_seg += (
-                                    audiosegment.silent(500, frame_rate=prompt_sr) + audio_seg[j_start:j_end])
+                                        audiosegment.silent(500, frame_rate=prompt_sr) + audio_seg[j_start:j_end])
                             if prompt_srt:
                                 prompt_text_list.append(prompt_subtitles[j].content)
 
@@ -393,97 +393,3 @@ class LoadSRT:
     def load_srt(self, srt):
         srt_path = folder_paths.get_annotated_filepath(srt)
         return (srt_path,)
-
-
-class CosyVoiceSRT2Speech:
-    def __init__(self):
-        self.cosyvoice = None
-
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "srt_file": ("SRT",),
-                "prompt_wav": ("AUDIO",),
-                "mode": (["zero_shot", "cross_lingual"],),
-                "language": (["<|zh|>", "<|en|>", "<|jp|>", "<|yue|>", "<|ko|>"],),
-                "seed": ("INT", {
-                    "default": 42
-                })
-            },
-            "optional": {
-                "prompt_text": ("TEXT",),  # Only needed for zero_shot mode
-            }
-        }
-
-    RETURN_TYPES = ("AUDIO",)
-    FUNCTION = "generate"
-    CATEGORY = "AIFSH_CosyVoice"
-
-    def generate(self, srt_file, prompt_wav, mode, language, seed, prompt_text=None):
-        # Initialize model
-        model_dir = pretrained_models
-        snapshot_download(model_id="iic/CosyVoice-300M", local_dir=model_dir)
-        set_all_random_seed(seed)
-
-        if self.cosyvoice is None:
-            self.cosyvoice = CosyVoice(model_dir)
-
-        # Read and parse SRT file
-        with open(srt_file, 'r', encoding="utf-8") as file:
-            text_file_content = file.read()
-        subtitles = list(SrtPare(text_file_content))
-
-        # Process prompt audio
-        waveform = prompt_wav['waveform'].squeeze(0)
-        source_sr = prompt_wav['sample_rate']
-        speech = waveform.mean(dim=0, keepdim=True)
-        if source_sr != prompt_sr:
-            speech = torchaudio.transforms.Resample(orig_freq=source_sr, new_freq=prompt_sr)(speech)
-        prompt_speech_16k = postprocess(speech)
-
-        # Generate speech from subtitles
-        audio_segments = []
-
-        for output in self.cosyvoice.inference_from_srt(
-                subtitles=subtitles,
-                prompt_speech_16k=prompt_speech_16k,
-                mode=mode,
-                language=language,
-                prompt_text=prompt_text
-        ):
-            # Process generated audio
-            audio_numpy = output['tts_speech'].squeeze(0).numpy() * 32768
-            audio_numpy = audio_numpy.astype(np.int16)
-            audio_seg = audiosegment.from_numpy_array(audio_numpy, target_sr)
-
-            # Adjust timing
-            subtitle_duration = output['end_time'] - output['start_time']
-            audio_duration = audio_seg.duration_seconds * 1000
-
-            if audio_duration > subtitle_duration:
-                ratio = audio_duration / subtitle_duration
-                audio_numpy = speed_change(audio_numpy, ratio, target_sr)
-                audio_seg = audiosegment.from_numpy_array(audio_numpy, target_sr)
-
-            # Add silence if needed
-            if audio_seg.duration_seconds * 1000 < subtitle_duration:
-                silence_duration = subtitle_duration - (audio_seg.duration_seconds * 1000)
-                audio_seg += audiosegment.silent(silence_duration, target_sr)
-
-            audio_segments.append(audio_seg)
-
-        # Combine all audio segments
-        if audio_segments:
-            final_audio = audio_segments[0]
-            for segment in audio_segments[1:]:
-                final_audio += segment
-
-            output_numpy = final_audio.to_numpy_array() / 32768
-            audio = {
-                "waveform": torch.stack([torch.Tensor(output_numpy).unsqueeze(0)]),
-                "sample_rate": target_sr
-            }
-            return (audio,)
-        else:
-            raise RuntimeError("No audio was generated")

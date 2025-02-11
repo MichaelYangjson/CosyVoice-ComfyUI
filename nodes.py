@@ -134,11 +134,11 @@ class CosyVoiceNode:
                  prompt_text=None, prompt_wav=None, instruct_text=None, source_wav=None):  # 添加 source_wav 参数
         t0 = ttime()
         if inference_mode == '自然语言控制':
-            model_dir = os.path.join(pretrained_models, "CosyVoice-300M-Instruct")
+            model_dir = pretrained_models
             snapshot_download(model_id="iic/CosyVoice-300M-Instruct", local_dir=model_dir)
             assert instruct_text is not None, "in 自然语言控制 mode, instruct_text can't be none"
-        if inference_mode in ["跨语种复刻", '3s极速复刻', '变声']:  # 添加变声模式
-            model_dir = os.path.join(pretrained_models, "CosyVoice-300M")
+        if inference_mode in ["跨语种复刻", '3s极速复刻', '变声']:
+            model_dir = pretrained_models
             snapshot_download(model_id="iic/CosyVoice-300M", local_dir=model_dir)
             assert prompt_wav is not None, "in 跨语种复刻, 3s极速复刻 or 变声 mode, prompt_wav can't be none"
             if inference_mode == "3s极速复刻":
@@ -146,7 +146,7 @@ class CosyVoiceNode:
             if inference_mode == "变声":
                 assert source_wav is not None, "in 变声 mode, source_wav can't be none"
         if inference_mode == "预训练音色":
-            model_dir = os.path.join(pretrained_models, "CosyVoice-300M-SFT")
+            model_dir = pretrained_models
             snapshot_download(model_id="iic/CosyVoice-300M-SFT", local_dir=model_dir)
 
         if self.model_dir != model_dir:
@@ -257,7 +257,7 @@ class CosyVoiceDubbingNode:
     CATEGORY = "AIFSH_CosyVoice"
 
     def generate(self, tts_srt, prompt_wav, language, if_single, seed, prompt_srt=None):
-        model_dir = os.path.join(pretrained_models, "CosyVoice-300M")
+        model_dir = pretrained_models
         snapshot_download(model_id="iic/CosyVoice-300M", local_dir=model_dir)
         set_all_random_seed(seed)
         if self.cosyvoice is None:
@@ -422,7 +422,7 @@ class CosyVoiceSRT2Speech:
 
     def generate(self, srt_file, prompt_wav, mode, language, seed, prompt_text=None):
         # Initialize model
-        model_dir = os.path.join(pretrained_models, "CosyVoice-300M")
+        model_dir = pretrained_models
         snapshot_download(model_id="iic/CosyVoice-300M", local_dir=model_dir)
         set_all_random_seed(seed)
 
